@@ -1836,7 +1836,8 @@ munit_suite_main_custom(const MunitSuite* suite, void* user_data,
                         int argc, char* const argv[MUNIT_ARRAY_PARAM(argc + 1)],
                         const MunitArgument arguments[]) {
   int result = EXIT_FAILURE;
-  MunitTestRunner runner;
+  MunitTestRunner *runners = NULL;
+  MunitTestRunner *runner = NULL;
   size_t parameters_size = 0;
   size_t tests_size = 0;
   int arg;
@@ -1851,208 +1852,223 @@ munit_suite_main_custom(const MunitSuite* suite, void* user_data,
   unsigned int tests_run;
   unsigned int tests_total;
   uint32_t i = 0;
+  uint32_t number_of_suites = 0;
 
-  runner.prefix = NULL;
-  runner.suite = NULL;
-  runner.tests = NULL;
-  runner.seed = 0;
-  runner.iterations = 0;
-  runner.parameters = NULL;
-  runner.single_parameter_mode = 0;
-  runner.user_data = NULL;
+  /** get number of suites **/
+  do
+  {
+    number_of_suites++;
+  } while (suite[i++].tests != NULL);
 
-  runner.report.successful = 0;
-  runner.report.skipped = 0;
-  runner.report.failed = 0;
-  runner.report.errored = 0;
-#if defined(MUNIT_ENABLE_TIMING)
-  runner.report.cpu_clock = 0;
-  runner.report.wall_clock = 0;
-#endif
+  /** last suite always null **/
+  number_of_suites--;
 
-  runner.colorize = 0;
-#if !defined(_WIN32)
-  runner.fork = 1;
-#else
-  runner.fork = 0;
-#endif
-  runner.show_stderr = 0;
-  runner.fatal_failures = 0;
-  runner.suite = suite;
-  runner.user_data = user_data;
-  runner.seed = munit_rand_generate_seed();
-  runner.colorize = munit_stream_supports_ansi(MUNIT_OUTPUT_FILE);
+  runners = munit_malloc(sizeof(MunitTestRunner) * number_of_suites);
 
-  for (arg = 1 ; arg < argc ; arg++) {
-    if (strncmp("--", argv[arg], 2) == 0) {
-      if (strcmp("seed", argv[arg] + 2) == 0) {
-        if (arg + 1 >= argc) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
+  for(i = 0 ; i < number_of_suites ; i++)
+  {
+    runner = &runners[i];
+    runner->prefix = NULL;
+    runner->suite = NULL;
+    runner->tests = NULL;
+    runner->seed = 0;
+    runner->iterations = 0;
+    runner->parameters = NULL;
+    runner->single_parameter_mode = 0;
+    runner->user_data = NULL;
+
+    runner->report.successful = 0;
+    runner->report.skipped = 0;
+    runner->report.failed = 0;
+    runner->report.errored = 0;
+  #if defined(MUNIT_ENABLE_TIMING)
+    runner->report.cpu_clock = 0;
+    runner->report.wall_clock = 0;
+  #endif
+
+    runner->colorize = 0;
+  #if !defined(_WIN32)
+    runner->fork = 1;
+  #else
+    runner->fork = 0;
+  #endif
+    runner->show_stderr = 0;
+    runner->fatal_failures = 0;
+    runner->suite = &suite[i];
+    runner->user_data = user_data;
+    runner->seed = munit_rand_generate_seed();
+    runner->colorize = munit_stream_supports_ansi(MUNIT_OUTPUT_FILE);
+
+    for (arg = 1 ; arg < argc ; arg++) {
+      if (strncmp("--", argv[arg], 2) == 0) {
+        if (strcmp("seed", argv[arg] + 2) == 0) {
+          if (arg + 1 >= argc) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
+            goto cleanup;
+          }
+
+          envptr = argv[arg + 1];
+          ts = strtoul(argv[arg + 1], &envptr, 0);
+          if (*envptr != '\0' || ts > (~((munit_uint32_t) 0U))) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
+            goto cleanup;
+          }
+          runner->seed = (munit_uint32_t) ts;
+
+          arg++;
+        } else if (strcmp("iterations", argv[arg] + 2) == 0) {
+          if (arg + 1 >= argc) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
+            goto cleanup;
+          }
+
+          endptr = argv[arg + 1];
+          iterations = strtoul(argv[arg + 1], &endptr, 0);
+          if (*endptr != '\0' || iterations > UINT_MAX) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
+            goto cleanup;
+          }
+
+          runner->iterations = (unsigned int) iterations;
+
+          arg++;
+        } else if (strcmp("param", argv[arg] + 2) == 0) {
+          if (arg + 2 >= argc) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires two arguments", argv[arg]);
+            goto cleanup;
+          }
+
+          runner->parameters = realloc(runner->parameters, sizeof(MunitParameter) * (parameters_size + 2));
+          if (runner->parameters == NULL) {
+            munit_log_internal(MUNIT_LOG_ERROR, stderr, "failed to allocate memory");
+            goto cleanup;
+          }
+          runner->parameters[parameters_size].name = (char*) argv[arg + 1];
+          runner->parameters[parameters_size].value = (char*) argv[arg + 2];
+          parameters_size++;
+          runner->parameters[parameters_size].name = NULL;
+          runner->parameters[parameters_size].value = NULL;
+          arg += 2;
+        } else if (strcmp("color", argv[arg] + 2) == 0) {
+          if (arg + 1 >= argc) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
+            goto cleanup;
+          }
+
+          if (strcmp(argv[arg + 1], "always") == 0)
+            runner->colorize = 1;
+          else if (strcmp(argv[arg + 1], "never") == 0)
+            runner->colorize = 0;
+          else if (strcmp(argv[arg + 1], "auto") == 0)
+            runner->colorize = munit_stream_supports_ansi(MUNIT_OUTPUT_FILE);
+          else {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
+            goto cleanup;
+          }
+
+          arg++;
+        } else if (strcmp("help", argv[arg] + 2) == 0) {
+          munit_print_help(argc, argv, user_data, arguments);
+          result = EXIT_SUCCESS;
           goto cleanup;
-        }
+        } else if (strcmp("single", argv[arg] + 2) == 0) {
+          runner->single_parameter_mode = 1;
+        } else if (strcmp("show-stderr", argv[arg] + 2) == 0) {
+          runner->show_stderr = 1;
+  #if !defined(_WIN32)
+        } else if (strcmp("no-fork", argv[arg] + 2) == 0) {
+          runner->fork = 0;
+  #endif
+        } else if (strcmp("fatal-failures", argv[arg] + 2) == 0) {
+          runner->fatal_failures = 1;
+        } else if (strcmp("log-visible", argv[arg] + 2) == 0 ||
+                  strcmp("log-fatal", argv[arg] + 2) == 0) {
+          if (arg + 1 >= argc) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
+            goto cleanup;
+          }
 
-        envptr = argv[arg + 1];
-        ts = strtoul(argv[arg + 1], &envptr, 0);
-        if (*envptr != '\0' || ts > (~((munit_uint32_t) 0U))) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
+          if (strcmp(argv[arg + 1], "debug") == 0)
+            level = MUNIT_LOG_DEBUG;
+          else if (strcmp(argv[arg + 1], "info") == 0)
+            level = MUNIT_LOG_INFO;
+          else if (strcmp(argv[arg + 1], "warning") == 0)
+            level = MUNIT_LOG_WARNING;
+          else if (strcmp(argv[arg + 1], "error") == 0)
+            level = MUNIT_LOG_ERROR;
+          else {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
+            goto cleanup;
+          }
+
+          if (strcmp("log-visible", argv[arg] + 2) == 0)
+            munit_log_level_visible = level;
+          else
+            munit_log_level_fatal = level;
+
+          arg++;
+        } else if (strcmp("list", argv[arg] + 2) == 0) {
+          munit_suite_list_tests(suite, 0, NULL);
+          result = EXIT_SUCCESS;
           goto cleanup;
-        }
-        runner.seed = (munit_uint32_t) ts;
-
-        arg++;
-      } else if (strcmp("iterations", argv[arg] + 2) == 0) {
-        if (arg + 1 >= argc) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
+        } else if (strcmp("list-params", argv[arg] + 2) == 0) {
+          munit_suite_list_tests(suite, 1, NULL);
+          result = EXIT_SUCCESS;
           goto cleanup;
+        } else {
+          argument = munit_arguments_find(arguments, argv[arg] + 2);
+          if (argument == NULL) {
+            munit_logf_internal(MUNIT_LOG_ERROR, stderr, "unknown argument ('%s')", argv[arg]);
+            goto cleanup;
+          }
+
+          if (!argument->parse_argument(suite, user_data, &arg, argc, argv))
+            goto cleanup;
         }
-
-        endptr = argv[arg + 1];
-        iterations = strtoul(argv[arg + 1], &endptr, 0);
-        if (*endptr != '\0' || iterations > UINT_MAX) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
-          goto cleanup;
-        }
-
-        runner.iterations = (unsigned int) iterations;
-
-        arg++;
-      } else if (strcmp("param", argv[arg] + 2) == 0) {
-        if (arg + 2 >= argc) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires two arguments", argv[arg]);
-          goto cleanup;
-        }
-
-        runner.parameters = realloc(runner.parameters, sizeof(MunitParameter) * (parameters_size + 2));
-        if (runner.parameters == NULL) {
+      } else {
+        runner_tests = realloc((void*) runner->tests, sizeof(char*) * (tests_size + 2));
+        if (runner_tests == NULL) {
           munit_log_internal(MUNIT_LOG_ERROR, stderr, "failed to allocate memory");
           goto cleanup;
         }
-        runner.parameters[parameters_size].name = (char*) argv[arg + 1];
-        runner.parameters[parameters_size].value = (char*) argv[arg + 2];
-        parameters_size++;
-        runner.parameters[parameters_size].name = NULL;
-        runner.parameters[parameters_size].value = NULL;
-        arg += 2;
-      } else if (strcmp("color", argv[arg] + 2) == 0) {
-        if (arg + 1 >= argc) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
-          goto cleanup;
-        }
-
-        if (strcmp(argv[arg + 1], "always") == 0)
-          runner.colorize = 1;
-        else if (strcmp(argv[arg + 1], "never") == 0)
-          runner.colorize = 0;
-        else if (strcmp(argv[arg + 1], "auto") == 0)
-          runner.colorize = munit_stream_supports_ansi(MUNIT_OUTPUT_FILE);
-        else {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
-          goto cleanup;
-        }
-
-        arg++;
-      } else if (strcmp("help", argv[arg] + 2) == 0) {
-        munit_print_help(argc, argv, user_data, arguments);
-        result = EXIT_SUCCESS;
-        goto cleanup;
-      } else if (strcmp("single", argv[arg] + 2) == 0) {
-        runner.single_parameter_mode = 1;
-      } else if (strcmp("show-stderr", argv[arg] + 2) == 0) {
-        runner.show_stderr = 1;
-#if !defined(_WIN32)
-      } else if (strcmp("no-fork", argv[arg] + 2) == 0) {
-        runner.fork = 0;
-#endif
-      } else if (strcmp("fatal-failures", argv[arg] + 2) == 0) {
-        runner.fatal_failures = 1;
-      } else if (strcmp("log-visible", argv[arg] + 2) == 0 ||
-                 strcmp("log-fatal", argv[arg] + 2) == 0) {
-        if (arg + 1 >= argc) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "%s requires an argument", argv[arg]);
-          goto cleanup;
-        }
-
-        if (strcmp(argv[arg + 1], "debug") == 0)
-          level = MUNIT_LOG_DEBUG;
-        else if (strcmp(argv[arg + 1], "info") == 0)
-          level = MUNIT_LOG_INFO;
-        else if (strcmp(argv[arg + 1], "warning") == 0)
-          level = MUNIT_LOG_WARNING;
-        else if (strcmp(argv[arg + 1], "error") == 0)
-          level = MUNIT_LOG_ERROR;
-        else {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "invalid value ('%s') passed to %s", argv[arg + 1], argv[arg]);
-          goto cleanup;
-        }
-
-        if (strcmp("log-visible", argv[arg] + 2) == 0)
-          munit_log_level_visible = level;
-        else
-          munit_log_level_fatal = level;
-
-        arg++;
-      } else if (strcmp("list", argv[arg] + 2) == 0) {
-        munit_suite_list_tests(suite, 0, NULL);
-        result = EXIT_SUCCESS;
-        goto cleanup;
-      } else if (strcmp("list-params", argv[arg] + 2) == 0) {
-        munit_suite_list_tests(suite, 1, NULL);
-        result = EXIT_SUCCESS;
-        goto cleanup;
-      } else {
-        argument = munit_arguments_find(arguments, argv[arg] + 2);
-        if (argument == NULL) {
-          munit_logf_internal(MUNIT_LOG_ERROR, stderr, "unknown argument ('%s')", argv[arg]);
-          goto cleanup;
-        }
-
-        if (!argument->parse_argument(suite, user_data, &arg, argc, argv))
-          goto cleanup;
+        runner->tests = runner_tests;
+        runner->tests[tests_size++] = argv[arg];
+        runner->tests[tests_size] = NULL;
       }
+    }
+
+    fflush(stderr);
+    if(runner->suite->prefix != NULL)
+    {
+      fprintf(MUNIT_OUTPUT_FILE, "Running test suite %s with seed 0x%08" PRIx32 "...\n", runner->suite->prefix, runner->seed);
+    }
+    else
+    {
+      fprintf(MUNIT_OUTPUT_FILE, "Running test suite with seed 0x%08" PRIx32 "...\n", runner->seed);
+    }
+
+    munit_test_runner_run(runner);
+
+    tests_run = runner->report.successful + runner->report.failed + runner->report.errored;
+    tests_total = tests_run + runner->report.skipped;
+    if (tests_run == 0) {
+      fprintf(stderr, "No tests run, %d (100%%) skipped.\n", runner->report.skipped);
     } else {
-      runner_tests = realloc((void*) runner.tests, sizeof(char*) * (tests_size + 2));
-      if (runner_tests == NULL) {
-        munit_log_internal(MUNIT_LOG_ERROR, stderr, "failed to allocate memory");
-        goto cleanup;
-      }
-      runner.tests = runner_tests;
-      runner.tests[tests_size++] = argv[arg];
-      runner.tests[tests_size] = NULL;
+      fprintf(MUNIT_OUTPUT_FILE, "%d of %d (%0.0f%%) tests successful, %d (%0.0f%%) test skipped.\n",
+              runner->report.successful, tests_run,
+              (((double) runner->report.successful) / ((double) tests_run)) * 100.0,
+              runner->report.skipped,
+              (((double) runner->report.skipped) / ((double) tests_total)) * 100.0);
+    }
+
+    if (runner->report.failed == 0 && runner->report.errored == 0) {
+      result = EXIT_SUCCESS;
     }
   }
-
-  fflush(stderr);
-  fprintf(MUNIT_OUTPUT_FILE, "Running test suite with seed 0x%08" PRIx32 "...\n", runner.seed);
-
-
-for(i = 0; suite[i].prefix != NULL ; i++)
-{
-  if(suite[i].prefix != NULL)
-  {
-    runner.suite = &suite[i];
-    munit_test_runner_run(&runner);
-  }
-}
-
-  tests_run = runner.report.successful + runner.report.failed + runner.report.errored;
-  tests_total = tests_run + runner.report.skipped;
-  if (tests_run == 0) {
-    fprintf(stderr, "No tests run, %d (100%%) skipped.\n", runner.report.skipped);
-  } else {
-    fprintf(MUNIT_OUTPUT_FILE, "%d of %d (%0.0f%%) tests successful, %d (%0.0f%%) test skipped.\n",
-            runner.report.successful, tests_run,
-            (((double) runner.report.successful) / ((double) tests_run)) * 100.0,
-            runner.report.skipped,
-            (((double) runner.report.skipped) / ((double) tests_total)) * 100.0);
-  }
-
-  if (runner.report.failed == 0 && runner.report.errored == 0) {
-    result = EXIT_SUCCESS;
-  }
-
- cleanup:
-  free(runner.parameters);
-  free((void*) runner.tests);
+  cleanup:
+    free(runner->parameters);
+    free((void*) runner->tests);
+  
 
   return result;
 }
