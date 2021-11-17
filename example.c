@@ -311,7 +311,8 @@ static MunitTest test_suite_tests[] = {
 
 /* Now we'll actually declare the test suite.  You could do this in
  * the main function, or on the heap, or whatever you want. */
-static const MunitSuite test_suite = {
+static const MunitSuite test_suite[] = {
+{
   /* This string will be prepended to all test names in this suite;
    * for example, "/example/rand" will become "/µnit/example/rand".
    * Note that, while it doesn't really matter for the top-level
@@ -335,6 +336,8 @@ static const MunitSuite test_suite = {
   /* Just like MUNIT_TEST_OPTION_NONE, you can provide
    * MUNIT_SUITE_OPTION_NONE or 0 to use the default settings. */
   MUNIT_SUITE_OPTION_NONE
+},
+{NULL, NULL, NULL, 0, MUNIT_SUITE_OPTION_NONE},
 };
 
 /* This is only necessary for EXIT_SUCCESS and EXIT_FAILURE, which you
@@ -347,5 +350,5 @@ int main(int argc, char* argv[MUNIT_ARRAY_PARAM(argc + 1)]) {
   /* Finally, we'll actually run our test suite!  That second argument
    * is the user_data parameter which will be passed either to the
    * test or (if provided) the fixture setup function. */
-  return munit_suite_main(&test_suite, (void*) "µnit", argc, argv);
+  return munit_suite_main(test_suite, (void*) "µnit", argc, argv);
 }

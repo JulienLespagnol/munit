@@ -1850,6 +1850,7 @@ munit_suite_main_custom(const MunitSuite* suite, void* user_data,
   const char** runner_tests;
   unsigned int tests_run;
   unsigned int tests_total;
+  uint32_t i = 0;
 
   runner.prefix = NULL;
   runner.suite = NULL;
@@ -2023,7 +2024,15 @@ munit_suite_main_custom(const MunitSuite* suite, void* user_data,
   fflush(stderr);
   fprintf(MUNIT_OUTPUT_FILE, "Running test suite with seed 0x%08" PRIx32 "...\n", runner.seed);
 
-  munit_test_runner_run(&runner);
+
+for(i = 0; suite[i].prefix != NULL ; i++)
+{
+  if(suite[i].prefix != NULL)
+  {
+    runner.suite = &suite[i];
+    munit_test_runner_run(&runner);
+  }
+}
 
   tests_run = runner.report.successful + runner.report.failed + runner.report.errored;
   tests_total = tests_run + runner.report.skipped;
