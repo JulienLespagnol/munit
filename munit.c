@@ -2063,8 +2063,74 @@ munit_suite_main_custom(const MunitSuite* suite, void* user_data,
 
     if (runner->report.failed == 0 && runner->report.errored == 0) {
       result = EXIT_SUCCESS;
+  }
+}
+
+/** tests summary **/
+  tests_total = 0;
+  int total_success = 0;
+  int total_skipped = 0;
+  int total_failed = 0;
+  int total_errored = 0;
+  int total_ran = 0;
+
+  for(i = 0 ; i < number_of_suites ; i++)
+  {
+    runner = &runners[i];
+    tests_total  += runner->report.successful + runner->report.skipped + runner->report.failed + runner->report.errored;
+    total_success += runner->report.successful;
+    total_skipped += runner->report.skipped;
+    total_failed += runner->report.failed;
+    total_errored += runner->report.errored;
+  }
+
+  total_ran = tests_total - total_skipped;
+
+  fprintf(MUNIT_OUTPUT_FILE, "Run Summary :     Type       Total     Ran      Passed      Errored      Failed     Skipped\n");
+  fprintf(MUNIT_OUTPUT_FILE, "                  All         %04d     %04d      %04d       %04d         %04d         %04d\n", \
+                                                          tests_total, total_ran, total_success, total_errored, total_failed, total_skipped);
+
+  for(i = 0 ; i < number_of_suites ; i++)
+  {
+    runner = &runners[i];
+    char printed_name[10];
+    int printed_name_len = 0;
+
+    if(runner->suite->prefix != NULL)
+    {
+      printed_name_len = strlen(runner->suite->prefix);
+
+      if(printed_name_len > 10)
+      {
+        printed_name_len = 10;
+      }
+
+      memset(printed_name, (char)' ', 10);
+      memcpy(printed_name, runner->suite->prefix, printed_name_len);
+      tests_total  = runner->report.successful + runner->report.skipped + runner->report.failed + runner->report.errored;
+      total_success = runner->report.successful;
+      total_skipped = runner->report.skipped;
+      total_failed = runner->report.failed;
+      total_errored = runner->report.errored;
+      total_ran = tests_total - total_skipped;
+
+      fprintf(MUNIT_OUTPUT_FILE, "                  %s  %04d     %04d      %04d       %04d         %04d         %04d\n", \
+      printed_name, tests_total, total_ran, total_success, total_errored, total_failed, total_skipped);
+    }
+    else
+    {
+      tests_total  = runner->report.successful + runner->report.skipped + runner->report.failed + runner->report.errored;
+      total_success = runner->report.successful;
+      total_skipped = runner->report.skipped;
+      total_failed = runner->report.failed;
+      total_errored = runner->report.errored;
+      total_ran = tests_total - total_skipped;
+
+      fprintf(MUNIT_OUTPUT_FILE, "            NoName    %04d     %04d      %04d       %04d         %04d         %04d\n", \
+      tests_total, total_ran, total_success, total_errored, total_failed, total_skipped);
     }
   }
+
   cleanup:
     free(runner->parameters);
     free((void*) runner->tests);

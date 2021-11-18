@@ -60,7 +60,7 @@ test_compare(const MunitParameter params[], void* data) {
   /* Obviously we can handle values larger than 'char' and 'uchar'.
    * There are versions for char, short, int, long, long long,
    * int8/16/32/64_t, as well as the unsigned versions of them all. */
-  munit_assert_short(42, <, val_short);
+  munit_assert_short(42, >, val_short);
 
   /* There is also support for size_t.
    *
@@ -318,7 +318,7 @@ static const MunitSuite test_suite[] = {
    * Note that, while it doesn't really matter for the top-level
    * suite, NULL signal the end of an array of tests; you should use
    * an empty string ("") instead. */
-  (char*) "",
+  (char*) "NameVeryToooooLong",
   /* The first parameter is the array of test suites. */
   test_suite_tests,
   /* In addition to containing test cases, suites can contain other
